@@ -1,0 +1,23 @@
+{
+  "name": "linkedin-profile-visitor",
+  "version": "1.0.0",
+  "description": "LinkedIn profile visitor bot using Puppeteer",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "node main.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "node-schedule": "^2.1.1",
+    "puppeteer": "^24.19.0"
+  },
+  "keywords": [
+    "linkedin",
+    "automation",
+    "puppeteer",
+    "profile-visitor"
+  ],
+  "author": "",
+  "license": "MIT"
+}
