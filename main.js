@@ -32,36 +32,28 @@ async function setupDriver() {
     // launchOptions.args.push('--disable-blink-features=AutomationControlled');
     
     try {
-        // Detect if we're running in Docker by checking for the Docker-specific paths
-        const dockerChromiumExists = await fs.access('/usr/bin/chromium').then(() => true).catch(() => false);
-        const dockerDriverExists = await fs.access('/usr/local/bin/chromedriver').then(() => true).catch(() => false);
+        console.log("💻 Using local Chrome setup...");
         
-        if (dockerChromiumExists && dockerDriverExists) {
-            console.log("🐳 Detected Docker environment, using Docker Chrome setup...");
-            launchOptions.executablePath = '/usr/bin/chromium';
-        } else {
-            console.log("💻 Using local Chrome setup...");
-            // For local development with puppeteer-core, try common Chrome paths
-            const chromePaths = [
-                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-                '/usr/bin/google-chrome', // Linux
-                '/usr/bin/chromium-browser', // Linux alternative
-                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
-                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
-            ];
-            
-            for (const chromePath of chromePaths) {
-                const exists = await fs.access(chromePath).then(() => true).catch(() => false);
-                if (exists) {
-                    launchOptions.executablePath = chromePath;
-                    console.log(`Found Chrome at: ${chromePath}`);
-                    break;
-                }
+        // For local development with puppeteer-core, try common Chrome paths
+        const chromePaths = [
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+            '/usr/bin/google-chrome', // Linux
+            '/usr/bin/chromium-browser', // Linux alternative
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
+        ];
+        
+        for (const chromePath of chromePaths) {
+            const exists = await fs.access(chromePath).then(() => true).catch(() => false);
+            if (exists) {
+                launchOptions.executablePath = chromePath;
+                console.log(`Found Chrome at: ${chromePath}`);
+                break;
             }
-            
-            if (!launchOptions.executablePath) {
-                console.log("⚠️ Chrome not found in common locations. Puppeteer-core will try default system Chrome.");
-            }
+        }
+        
+        if (!launchOptions.executablePath) {
+            console.log("⚠️ Chrome not found in common locations. Puppeteer-core will try default system Chrome.");
         }
         
         const browser = await puppeteer.launch(launchOptions);
@@ -93,14 +85,8 @@ async function addCookie(page) {
     await page.goto("https://www.linkedin.com");
     await sleep(2000);
     
-    // Get cookies path from environment variable, with Docker-friendly default
+    // Get cookies path from environment variable, default to local file
     let cookieFile = process.env.COOKIES_PATH || "/app/cookies.json";
-    
-    // If running locally (not in Docker), fall back to local path
-    const fileExists = await fs.access(cookieFile).then(() => true).catch(() => false);
-    if (!fileExists && cookieFile === "/app/cookies.json") {
-        cookieFile = "cookies.json";
-    }
     
     console.log(`Using cookies file: ${cookieFile}`);
     
