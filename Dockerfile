@@ -24,6 +24,11 @@ RUN apt-get update -y && \
     libappindicator3-1 \
     libasound2
 
+# Create a non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -G audio,video appuser \
+    && mkdir -p /home/appuser/Downloads \
+    && chown -R appuser:appuser /home/appuser
+
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
@@ -35,6 +40,12 @@ RUN npm install
 
 # Copy the application code to the container
 COPY . .
+
+# Change ownership of the app directory to appuser
+RUN chown -R appuser:appuser /usr/src/app
+
+# Switch to non-root user
+USER appuser
 
 # Expose the ports needed for the application
 EXPOSE 8080

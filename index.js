@@ -16,7 +16,7 @@ async function setupDriver() {
     
     // Setup Chrome options for Docker environment
     const launchOptions = {
-        headless: false, // Must be headless in Docker (matching Python)
+        headless: true, // Must be headless in Docker (matching Python)
         args: [
             // Only essential arguments, most are commented out like in Python
             // '--no-sandbox', // Required for Docker (commented out like Python)
