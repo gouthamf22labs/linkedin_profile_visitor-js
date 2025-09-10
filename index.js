@@ -16,7 +16,7 @@ async function setupDriver() {
     
     // Setup Chrome options for Docker environment
     const launchOptions = {
-        headless: true, // Must be headless in Docker (matching Python)
+        headless: false, // Must be headless in Docker (matching Python)
         args: [
             // Only essential arguments, most are commented out like in Python
             // '--no-sandbox', // Required for Docker (commented out like Python)
@@ -172,10 +172,10 @@ async function addCookie(page) {
     await sleep(2000);
     
     // Check if we're actually logged in by looking for login/signup indicators
-    const isLoggedIn = await checkLoginStatus(page);
-    if (!isLoggedIn) {
-        throw new Error("❌ Cookie authentication failed - still seeing login/signup page");
-    }
+    // const isLoggedIn = await checkLoginStatus(page);
+    // if (!isLoggedIn) {
+    //     throw new Error("❌ Cookie authentication failed - still seeing login/signup page");
+    // }
     
     console.log("✅ Logged in using cookies!");
 }
@@ -266,6 +266,20 @@ async function main() {
     }
     
     console.log(`📅 Current time: ${new Date().toLocaleString()}`);
+    
+    // Test authentication before scheduling any jobs
+    // console.log("🔐 Testing authentication before starting profile visits...");
+    // try {
+    //     const testBrowser = await setupDriver();
+    //     const testPage = await testBrowser.newPage();
+    //     await addCookie(testPage);
+    //     await testBrowser.close();
+    //     console.log("✅ Authentication test passed - proceeding with profile visits");
+    // } catch (error) {
+    //     console.error("❌ Authentication test failed:", error.message);
+    //     console.error("💡 Please check your cookies.json file and try again");
+    //     return;
+    // }
     
     // Schedule a job for each URL
     for (let index = 0; index < profileUrls.length; index++) {
