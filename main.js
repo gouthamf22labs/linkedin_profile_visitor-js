@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const fs = require('fs').promises;
 const path = require('path');
 const schedule = require('node-schedule');
@@ -41,7 +41,27 @@ async function setupDriver() {
             launchOptions.executablePath = '/usr/bin/chromium';
         } else {
             console.log("💻 Using local Chrome setup...");
-            // For local development, let Puppeteer find Chrome automatically
+            // For local development with puppeteer-core, try common Chrome paths
+            const chromePaths = [
+                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+                '/usr/bin/google-chrome', // Linux
+                '/usr/bin/chromium-browser', // Linux alternative
+                'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
+                'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
+            ];
+            
+            for (const chromePath of chromePaths) {
+                const exists = await fs.access(chromePath).then(() => true).catch(() => false);
+                if (exists) {
+                    launchOptions.executablePath = chromePath;
+                    console.log(`Found Chrome at: ${chromePath}`);
+                    break;
+                }
+            }
+            
+            if (!launchOptions.executablePath) {
+                console.log("⚠️ Chrome not found in common locations. Puppeteer-core will try default system Chrome.");
+            }
         }
         
         const browser = await puppeteer.launch(launchOptions);
