@@ -81,6 +81,51 @@ async function setupDriver() {
 }
 
 /**
+ * Check if we're logged in by looking for login/signup page indicators
+ */
+async function checkLoginStatus(page) {
+    try {
+        // Check for login/signup page indicators
+        const loginIndicators = [
+            'h1[data-test-id="hero__headline"]', // "Welcome to your professional community"
+            'h1.authwall-join-form__title', // "Join LinkedIn"
+            'form.join-form', // Join form
+            '.authwall-join-form__swap-cta', // "Already on LinkedIn? Sign in"
+            'input[name="session_key"]', // Login form email input
+            'input[name="session_password"]', // Login form password input
+        ];
+        
+        // Check if any login indicators are present
+        for (const selector of loginIndicators) {
+            const element = await page.$(selector);
+            if (element) {
+                console.log(`🚫 Found login indicator: ${selector}`);
+                return false;
+            }
+        }
+        
+        // Check for authwall URL pattern
+        const currentUrl = page.url();
+        if (currentUrl.includes('/authwall') || currentUrl.includes('/signup') || currentUrl.includes('/login')) {
+            console.log(`🚫 Detected login/signup URL: ${currentUrl}`);
+            return false;
+        }
+        
+        // If we're on LinkedIn main domain and no login indicators found, we're likely logged in
+        if (currentUrl.includes('linkedin.com')) {
+            console.log(`✅ Login verification passed - no login indicators found`);
+            return true;
+        }
+        
+        return false;
+        
+    } catch (error) {
+        console.log(`⚠️ Error checking login status: ${error}`);
+        return false;
+    }
+}
+
+/**
  * Add the LinkedIn cookie to the browser (simplified version)
  */
 async function addCookie(page) {
@@ -125,6 +170,13 @@ async function addCookie(page) {
     
     await page.reload();
     await sleep(2000);
+    
+    // Check if we're actually logged in by looking for login/signup indicators
+    const isLoggedIn = await checkLoginStatus(page);
+    if (!isLoggedIn) {
+        throw new Error("❌ Cookie authentication failed - still seeing login/signup page");
+    }
+    
     console.log("✅ Logged in using cookies!");
 }
 
@@ -144,6 +196,16 @@ async function visitProfile(url) {
         
         // Visit the profile
         await page.goto(url);
+        await sleep(2000); // Wait for page to load
+        
+        // Check if we're actually on the profile or redirected to login
+        const isOnProfile = await checkLoginStatus(page);
+        if (!isOnProfile) {
+            console.log(`   🚫 Redirected to login page - authentication may have expired`);
+            throw new Error("Profile visit failed - redirected to login");
+        }
+        
+        console.log(`   ✅ Successfully accessed profile page`);
         
         // Random wait time between 5-10 seconds with 1 decimal place (matching Python exactly)
         const waitTime = Math.round((Math.random() * (10 - 5) + 5) * 10) / 10;
