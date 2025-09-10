@@ -86,7 +86,7 @@ async function addCookie(page) {
     await sleep(2000);
     
     // Get cookies path from environment variable, default to local file
-    let cookieFile = process.env.COOKIES_PATH || "/app/cookies.json";
+    let cookieFile = process.env.COOKIES_PATH || "/usr/src/app/cookies.json";
     
     console.log(`Using cookies file: ${cookieFile}`);
     

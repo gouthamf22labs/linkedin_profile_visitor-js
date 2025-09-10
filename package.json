@@ -4,8 +4,8 @@
   "description": "LinkedIn profile visitor bot using Puppeteer",
   "main": "main.js",
   "scripts": {
-    "start": "node main.js",
-    "dev": "node main.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
