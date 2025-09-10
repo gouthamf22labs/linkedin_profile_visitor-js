@@ -16,15 +16,17 @@ async function setupDriver() {
     
     // Setup Chrome options for Docker environment
     const launchOptions = {
-        headless: false, // Must be headless in Docker (matching Python)
+        headless: true, // Must be headless in Docker (matching Python)
         args: [
-            // Only essential arguments, most are commented out like in Python
-            // '--no-sandbox', // Required for Docker (commented out like Python)
-            // '--disable-dev-shm-usage', // Overcome limited resource problems (commented out like Python)
-            // '--disable-gpu', // Disable GPU acceleration (commented out like Python)
-            // '--disable-extensions', // Disable extensions (commented out like Python)
-            // '--window-size=1920,1080', // Set window size (commented out like Python)
-            // '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            '--no-sandbox', // Required for Docker namespace issues
+            '--disable-setuid-sandbox', // Required for Docker
+            '--disable-dev-shm-usage', // Overcome limited resource problems in Docker
+            '--disable-gpu', // Disable GPU acceleration in Docker
+            '--disable-extensions', // Disable extensions
+            '--disable-web-security', // Disable web security for Docker
+            '--disable-features=VizDisplayCompositor', // Helps with Docker issues
+            '--window-size=1920,1080', // Set window size
+            '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
     };
     
