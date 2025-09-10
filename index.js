@@ -34,11 +34,13 @@ async function setupDriver() {
     try {
         console.log("💻 Using local Chrome setup...");
         
-        // For local development with puppeteer-core, try common Chrome paths
+        // Try common Chrome paths for different environments
         const chromePaths = [
-            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
+            '/usr/bin/chromium', // Docker/Alpine Linux
+            '/usr/bin/chromium-browser', // Ubuntu/Debian
             '/usr/bin/google-chrome', // Linux
-            '/usr/bin/chromium-browser', // Linux alternative
+            '/usr/bin/google-chrome-stable', // Linux stable
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
             'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
             'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
         ];
@@ -53,9 +55,12 @@ async function setupDriver() {
         }
         
         if (!launchOptions.executablePath) {
-            console.log("⚠️ Chrome not found in common locations. Puppeteer-core will try default system Chrome.");
+            console.log("⚠️ Chrome not found in common locations. Trying with chrome channel...");
+            // Try using chrome channel as fallback
+            launchOptions.channel = 'chrome';
         }
         
+        console.log("🚀 Launching browser with executablePath:", launchOptions.executablePath || 'using channel');
         const browser = await puppeteer.launch(launchOptions);
         
         // Execute script to remove automation detection (matching Python)
