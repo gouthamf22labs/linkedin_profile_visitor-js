@@ -140,20 +140,21 @@ async function addCookie(page) {
     await sleep(2000);
     
     // Get cookies path from environment variable, default to local file
-    let cookieFile = process.env.COOKIES_PATH || "/usr/src/app/cookies.json";
+    let cookieJson = process.env.COOKIES_PATH || "/usr/src/app/cookies.json";
     
-    console.log(`Using cookies file: ${cookieFile}`);
+    console.log(`Using cookies file: ${cookieJson}`);
     
     // Verify the file exists
-    const finalFileExists = await fs.access(cookieFile).then(() => true).catch(() => false);
-    if (!finalFileExists) {
-        throw new Error(`Cookies file not found: ${cookieFile}`);
-    }
+    // const finalFileExists = await fs.access(cookieFile).then(() => true).catch(() => false);
+    // if (!finalFileExists) {
+    //     throw new Error(`Cookies file not found: ${cookieFile}`);
+    // }
     
-    const fileContent = await fs.readFile(cookieFile, 'utf8');
-    const cookies = JSON.parse(fileContent);
+    // const fileContent = await fs.readFile(cookieFile, 'utf8');
+    const cookies = JSON.parse(cookieJson);
+    const cookies_json = cookies["cookies"]
     
-    for (const cookie of cookies) {
+    for (const cookie of cookies_json) {
         try {
             // Only add essential cookie data (matching Python exactly)
             const cookieData = {
