@@ -51,3 +51,43 @@ The code includes three scheduling options (uncomment the one you want):
 
 - `URLS`: JSON string containing LinkedIn profile URLs
 - `COOKIES_PATH`: Path to cookies file (optional, defaults based on environment)
+
+
+## Running the visitor all time using PM2
+
+### Install PM2 globally
+```bash
+sudo npm install -g pm2
+```
+
+### Start your app with PM2
+```bash
+pm2 start npm --name "linkedin-bot" -- run dev
+```
+
+### Check status
+```bash
+sudo npm install -g pm2
+```
+pm2 status
+pm2 logs linkedin-bot
+
+### restart
+```bash
+pm2 restart linkedin-bot
+```
+
+### Stop the current process
+```bash
+pm2 stop linkedin-bot
+```
+
+### Or delete and start fresh
+```bash
+pm2 delete linkedin-bot
+pm2 start npm --name "linkedin-bot" -- run dev
+```
+
+
+
+

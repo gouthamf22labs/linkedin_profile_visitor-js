@@ -76,7 +76,7 @@ async function setupDriver() {
     console.log("Initializing the Chrome driver...");
     
     const launchOptions = {
-        headless: false,
+        headless: true,
         args: [
             '--no-sandbox',
         ]
@@ -203,45 +203,64 @@ async function checkLoginStatus(page) {
  */
 async function addCookie(page) {
     console.log("Adding LinkedIn session cookie...");
-    
+   
+    // Ensure we're on LinkedIn
     await page.goto("https://www.linkedin.com");
     await sleep(2000);
-    
-    let cookieFile = process.env.COOKIES_PATH || "/usr/src/app/cookies.json";
-    console.log(`Using cookies file: ${cookieFile}`);
-    
-    const finalFileExists = await fs.access(cookieFile).then(() => true).catch(() => false);
-    if (!finalFileExists) {
-        throw new Error(`Cookies file not found: ${cookieFile}`);
-    }
-    
-    const fileContent = await fs.readFile(cookieFile, 'utf8');
-    const cookies = JSON.parse(fileContent);
-    
-    for (const cookie of cookies) {
-        try {
-            const cookieData = {
-                name: cookie.name,
-                value: cookie.value,
-                domain: '.linkedin.com',
-                path: '/'
-            };
-            
-            await page.setCookie(cookieData);
-            console.log(`✅ Added cookie: ${cookie.name}`);
-            
-        } catch (error) {
-            console.log(`⚠️ Failed to add cookie ${cookie.name || 'unknown'}: ${error}`);
-            continue;
+   
+    // Get cookies from GitHub Gist
+    const gistUrl = process.env.GIST_URL || "https://gist.githubusercontent.com/sharmila-f22/74e9460296b04691fcd5e050460ef491/raw";
+   
+    console.log(`Fetching cookies from Gist: ${gistUrl}`);
+   
+    try {
+        // Fetch cookies from Gist
+        const response = await fetch(gistUrl);
+       
+        if (!response.ok) {
+            throw new Error(`Failed to fetch cookies from Gist: ${response.status} ${response.statusText}`);
         }
+       
+        const fileContent = await response.text();
+        const cookies = JSON.parse(fileContent);
+        // console.log("cookies: , ", cookies);
+       
+        for (const cookie of cookies) {
+            try {
+                // Only add essential cookie data (matching Python exactly)
+                const cookieData = {
+                    name: cookie.name,
+                    value: cookie.value,
+                    domain: '.linkedin.com', // Force LinkedIn domain
+                    path: '/'
+                };
+               
+                await page.setCookie(cookieData);
+                console.log(`✅ Added cookie: ${cookie.name}`);
+               
+            } catch (error) {
+                console.log(`⚠️ Failed to add cookie ${cookie.name || 'unknown'}: ${error}`);
+                continue;
+            }
+        }
+       
+        // THIS IS THE KEY PART YOU WERE MISSING:
+        await page.reload();
+        await sleep(2000);
+       
+        // Check if we're actually logged in by looking for login/signup indicators
+        // const isLoggedIn = await checkLoginStatus(page);
+        // if (!isLoggedIn) {
+        //     throw new Error("❌ Cookie authentication failed - still seeing login/signup page");
+        // }
+       
+        console.log("✅ Logged in using cookies!");
+       
+    } catch (error) {
+        throw new Error(`Failed to fetch or parse cookies from Gist: ${error.message}`);
     }
-    
-    await page.reload();
-    await sleep(2000);
-    
-    // Remove the login check from here - we'll check after visiting the profile
-    console.log("✅ Cookies added successfully!");
-}
+ }
+ 
 
 /**
  * Visit a single LinkedIn profile URL
@@ -656,7 +675,7 @@ async function main() {
             console.error("❌ Cron job failed:", error);
         }
     }, {
-        timezone: "UTC" // Change this to your timezone if needed
+        timezone: "IST" // Change this to your timezone if needed
     });
     
     console.log("✅ Application started successfully!");
