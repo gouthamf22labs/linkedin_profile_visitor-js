@@ -5,9 +5,68 @@ const cron = require('node-cron');
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
 require('dotenv').config({ override: true });
+const https = require('https');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Send a Slack notification
+ */
+async function sendSlackNotification(message) {
+    const webhookUrl = process.env.SLACK_WEBHOOK_URL;
+    
+    console.log(`🔔 Attempting to send Slack notification: ${message}`);
+    
+    return new Promise((resolve, reject) => {
+        const url = new URL(webhookUrl);
+        
+        // Clean the message - remove problematic characters that might break JSON
+        const cleanMessage = message.replace(/\n/g, ' ').replace(/"/g, "'");
+        const data = JSON.stringify({ text: cleanMessage });
+        
+        console.log(`📡 Sending to Slack: ${url.hostname}${url.pathname}`);
+        console.log(`📦 Payload: ${data}`); // Debug: show what we're sending
+        
+        const options = {
+            hostname: url.hostname,
+            port: 443,
+            path: url.pathname + url.search,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data, 'utf8')
+            }
+        };
+        
+        const req = https.request(options, (res) => {
+            let responseData = '';
+            
+            res.on('data', (chunk) => {
+                responseData += chunk;
+            });
+            
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    console.log("✅ Slack notification sent successfully");
+                    console.log(`📥 Response: ${responseData}`);
+                } else {
+                    console.log(`⚠️ Failed to send Slack notification: ${res.statusCode}`);
+                    console.log(`📥 Response: ${responseData}`);
+                }
+                resolve();
+            });
+        });
+        
+        req.on('error', (error) => {
+            console.log(`⚠️ Error sending Slack notification: ${error.message}`);
+            resolve();
+        });
+        
+        req.write(data);
+        req.end();
+    });
 }
 
 /**
@@ -16,37 +75,24 @@ function sleep(ms) {
 async function setupDriver() {
     console.log("Initializing the Chrome driver...");
     
-    // Setup Chrome options for Docker environment
     const launchOptions = {
-        headless: true, // Must be headless in Docker (matching Python)
+        headless: false,
         args: [
-            '--no-sandbox', // Required for Docker namespace issues
-            // '--disable-setuid-sandbox', // Required for Docker
-            // '--disable-dev-shm-usage', // Overcome limited resource problems in Docker
-            // '--disable-gpu', // Disable GPU acceleration in Docker
-            // '--disable-extensions', // Disable extensions
-            // '--disable-web-security', // Disable web security for Docker
-            // '--disable-features=VizDisplayCompositor', // Helps with Docker issues
-            // '--window-size=1920,1080', // Set window size
-            // '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            '--no-sandbox',
         ]
     };
-    
-    // Additional options to avoid detection (commented out like Python)
-    // launchOptions.args.push('--disable-blink-features=AutomationControlled');
     
     try {
         console.log("💻 Using local Chrome setup...");
         
-        // Try common Chrome paths for different environments
         const chromePaths = [
-            '/usr/bin/chromium', // Docker/Alpine Linux
-            '/usr/bin/chromium-browser', // Ubuntu/Debian
-            '/usr/bin/google-chrome', // Linux
-            '/usr/bin/google-chrome-stable', // Linux stable
-            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
-            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
+            '/usr/bin/chromium',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/google-chrome',
+            '/usr/bin/google-chrome-stable',
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
         ];
         
         for (const chromePath of chromePaths) {
@@ -60,14 +106,12 @@ async function setupDriver() {
         
         if (!launchOptions.executablePath) {
             console.log("⚠️ Chrome not found in common locations. Trying with chrome channel...");
-            // Try using chrome channel as fallback
             launchOptions.channel = 'chrome';
         }
         
         console.log("🚀 Launching browser with executablePath:", launchOptions.executablePath || 'using channel');
         const browser = await puppeteer.launch(launchOptions);
         
-        // Execute script to remove automation detection (matching Python)
         const pages = await browser.pages();
         const page = pages[0];
         await page.evaluateOnNewDocument(() => {
@@ -89,62 +133,83 @@ async function setupDriver() {
  */
 async function checkLoginStatus(page) {
     try {
-        // Check for login/signup page indicators
-        const loginIndicators = [
-            'h1[data-test-id="hero__headline"]', // "Welcome to your professional community"
-            'h1.authwall-join-form__title', // "Join LinkedIn"
-            'form.join-form', // Join form
-            '.authwall-join-form__swap-cta', // "Already on LinkedIn? Sign in"
-            'input[name="session_key"]', // Login form email input
-            'input[name="session_password"]', // Login form password input
+        const redirectErrorIndicators = [
+            '#main-frame-error',
+            'div.interstitial-wrapper',
+            '#main-message h1 span',
+            '.error-code',
         ];
         
-        // Check if any login indicators are present
+        for (const selector of redirectErrorIndicators) {
+            const element = await page.$(selector);
+            if (element) {
+                const text = await element.evaluate(el => el.textContent);
+                if (text && (text.includes("This page isn't working") || 
+                           text.includes("redirected you too many times") ||
+                           text.includes("ERR_TOO_MANY_REDIRECTS"))) {
+                    console.log(`🚫 Found redirect error: ${text.trim()}`);
+                    console.log(`💡 Suggestion: Clear cookies and try again`);
+                    console.log(`🛑 Stopping execution due to login error`);
+                    await sendSlackNotification(`🚨 URGENT: LinkedIn login error detected - ${text.trim()}`);
+                    throw new Error("LOGIN_ERROR: Too many redirects - cookies may be invalid");
+                }
+            }
+        }
+        
+        const loginIndicators = [
+            'h1[data-test-id="hero__headline"]',
+            'h1.authwall-join-form__title',
+            'form.join-form',
+            '.authwall-join-form__swap-cta',
+            'input[name="session_key"]',
+            'input[name="session_password"]',
+        ];
+        
         for (const selector of loginIndicators) {
             const element = await page.$(selector);
             if (element) {
                 console.log(`🚫 Found login indicator: ${selector}`);
-                return false;
+                console.log(`🛑 Stopping execution due to login error`);
+                throw new Error("LOGIN_ERROR: Not logged in - authentication required");
             }
         }
         
-        // Check for authwall URL pattern
         const currentUrl = page.url();
         if (currentUrl.includes('/authwall') || currentUrl.includes('/signup') || currentUrl.includes('/login')) {
             console.log(`🚫 Detected login/signup URL: ${currentUrl}`);
-            return false;
+            console.log(`🛑 Stopping execution due to login error`);
+            throw new Error("LOGIN_ERROR: Redirected to authentication page");
         }
         
-        // If we're on LinkedIn main domain and no login indicators found, we're likely logged in
         if (currentUrl.includes('linkedin.com')) {
             console.log(`✅ Login verification passed - no login indicators found`);
             return true;
         }
         
-        return false;
+        console.log(`🛑 Stopping execution - not on LinkedIn domain`);
+        throw new Error("LOGIN_ERROR: Not on LinkedIn domain");
         
     } catch (error) {
+        if (error.message.startsWith('LOGIN_ERROR:')) {
+            throw error;
+        }
         console.log(`⚠️ Error checking login status: ${error}`);
-        return false;
+        throw new Error("LOGIN_ERROR: Unable to verify login status");
     }
 }
 
 /**
- * Add the LinkedIn cookie to the browser (simplified version)
+ * Add the LinkedIn cookie to the browser
  */
 async function addCookie(page) {
     console.log("Adding LinkedIn session cookie...");
     
-    // Ensure we're on LinkedIn
     await page.goto("https://www.linkedin.com");
     await sleep(2000);
     
-    // Get cookies path from environment variable, default to local file
     let cookieFile = process.env.COOKIES_PATH || "/usr/src/app/cookies.json";
-    
     console.log(`Using cookies file: ${cookieFile}`);
     
-    // Verify the file exists
     const finalFileExists = await fs.access(cookieFile).then(() => true).catch(() => false);
     if (!finalFileExists) {
         throw new Error(`Cookies file not found: ${cookieFile}`);
@@ -155,11 +220,10 @@ async function addCookie(page) {
     
     for (const cookie of cookies) {
         try {
-            // Only add essential cookie data (matching Python exactly)
             const cookieData = {
                 name: cookie.name,
                 value: cookie.value,
-                domain: '.linkedin.com', // Force LinkedIn domain
+                domain: '.linkedin.com',
                 path: '/'
             };
             
@@ -175,13 +239,8 @@ async function addCookie(page) {
     await page.reload();
     await sleep(2000);
     
-    // Check if we're actually logged in by looking for login/signup indicators
-    // const isLoggedIn = await checkLoginStatus(page);
-    // if (!isLoggedIn) {
-    //     throw new Error("❌ Cookie authentication failed - still seeing login/signup page");
-    // }
-    
-    console.log("✅ Logged in using cookies!");
+    // Remove the login check from here - we'll check after visiting the profile
+    console.log("✅ Cookies added successfully!");
 }
 
 /**
@@ -192,44 +251,41 @@ async function visitProfile(url) {
     let browser = null;
     
     try {
-        browser = await setupDriver(); // Initialize the driver for each job
+        browser = await setupDriver();
         const page = await browser.newPage();
         
-        // Add the LinkedIn cookie
         await addCookie(page);
         
-        // Visit the profile
         await page.goto(url);
-        await sleep(2000); // Wait for page to load
+        await sleep(2000);
         
-        // Check if we're actually on the profile or redirected to login
+        // NOW check if we're logged in by testing the actual profile page
+        console.log("🔍 Checking login status after visiting profile...");
         const isOnProfile = await checkLoginStatus(page);
         if (!isOnProfile) {
-            console.log(`   🚫 Redirected to login page - authentication may have expired`);
-            throw new Error("Profile visit failed - redirected to login");
+            console.log(`   🚫 Login check failed on profile page`);
+            return { success: false, error: "LOGIN_ERROR: Authentication failed on profile page" };
         }
         
         console.log(`   ✅ Successfully accessed profile page`);
         
-        // Random wait time between 5-10 seconds with 1 decimal place (matching Python exactly)
         const waitTime = Math.round((Math.random() * (10 - 5) + 5) * 10) / 10;
         console.log(`   Waiting for ${waitTime} seconds...`);
         await sleep(waitTime * 1000);
         
         console.log(`   ✅ Successfully visited: ${url}`);
+        return { success: true };
         
     } catch (error) {
         console.log(`   ❌ Error visiting ${url}: ${error}`);
+        return { success: false, error: error.message };
     } finally {
-        // Close the browser and cleanup
         if (browser) {
             try {
                 console.log("Closing the browser...");
-                await browser.close();
                 console.log("✅ Browser closed.");
             } catch (error) {
                 console.log(`⚠️ Error closing browser: ${error}`);
-                // Force kill Chrome processes if close fails
                 try {
                     const { exec } = require('child_process');
                     exec('pkill -f chromium', () => {});
@@ -242,7 +298,7 @@ async function visitProfile(url) {
 }
 
 /**
- * Load LinkedIn profile URLs from environment variable
+ * Load profile URLs
  */
 function loadProfileUrls() {
     try {
@@ -262,10 +318,16 @@ function loadProfileUrls() {
 async function runProfileVisits() {
     console.log("🎯 Starting profile visits...");
     
-    // Load profile URLs
+    console.log("🧪 Testing Slack notification...");
+    await sendSlackNotification("🧪 Test message from LinkedIn Profile Visitor");
+    
+    await sendSlackNotification("🎯 LinkedIn Profile Visitor: Starting profile visits...");
+    
     const profileUrls = loadProfileUrls();
     if (!profileUrls) {
-        console.log("❌ No valid profile URLs found. Exiting...");
+        const errorMsg = "❌ No valid profile URLs found. Exiting...";
+        console.log(errorMsg);
+        await sendSlackNotification(`❌ LinkedIn Profile Visitor: ${errorMsg}`);
         return { success: false, message: "No valid profile URLs found" };
     }
     
@@ -273,23 +335,68 @@ async function runProfileVisits() {
     console.log(`🔗 Visiting ${profileUrls.length} profiles...`);
     
     const results = [];
+    let successCount = 0;
+    let failureCount = 0;
     
-    // Visit each profile
     for (let index = 0; index < profileUrls.length; index++) {
         const url = profileUrls[index];
         console.log(`⏰ Processing URL ${index + 1}: ${url}`);
         
-        try {
-            await visitProfile(url);
+        const result = await visitProfile(url);
+        
+        if (result.success) {
             results.push({ url, success: true });
-        } catch (error) {
-            console.error(`❌ Failed to visit ${url}:`, error.message);
-            results.push({ url, success: false, error: error.message });
+            successCount++;
+            
+        } else {
+            failureCount++;
+            results.push({ url, success: false, error: result.error });
+            
+            console.error(`❌ Failed to visit ${url}: ${result.error}`);
+            console.error(`🛑 STOPPING PROFILE VISITS - Error detected`);
+            
+            const failureMsg = `❌ LinkedIn Profile Visitor: FAILED on profile ${index + 1}/${profileUrls.length} - URL: ${url} - Error: ${result.error} - Stats: ${successCount} successful, ${failureCount} failed`;
+            await sendSlackNotification(failureMsg);
+            
+            // Just return instead of exiting the process
+            if (result.error && result.error.includes('LOGIN_ERROR')) {
+                console.error(`🚨 LOGIN ERROR - STOPPING VISITS BUT KEEPING APP RUNNING`);
+            }
+            
+            return {
+                success: false,
+                totalUrls: profileUrls.length,
+                processedUrls: index + 1,
+                successCount,
+                failureCount,
+                results,
+                message: `Failed on profile ${index + 1}: ${result.error}`
+            };
+        }
+        
+        if (index < profileUrls.length - 1) {
+            const delay = Math.round((Math.random() * (15 - 5) + 5) * 10) / 10;
+            console.log(`⏸️  Waiting ${delay} seconds before next profile...`);
+            await sleep(delay * 1000);
         }
     }
     
-    console.log("✅ Profile visits completed!");
-    return { success: true, results };
+    console.log(`\n📊 ALL PROFILES COMPLETED SUCCESSFULLY!`);
+    console.log(`✅ Successful visits: ${successCount}`);
+    console.log(`❌ Failed visits: ${failureCount}`);
+    console.log(`📅 Completed at: ${new Date().toLocaleString()}`);
+    
+    const summaryMsg = `✅ LinkedIn Profile Visitor: ALL COMPLETED SUCCESSFULLY! 📊 ${successCount} successful, ${failureCount} failed out of ${profileUrls.length} total profiles`;
+    await sendSlackNotification(summaryMsg);
+    
+    return {
+        success: true,
+        totalUrls: profileUrls.length,
+        processedUrls: profileUrls.length,
+        successCount,
+        failureCount,
+        results
+    };
 }
 
 /**
@@ -541,7 +648,7 @@ async function main() {
     
     // Setup cron job for 9 AM daily
     console.log("⏰ Setting up cron job for 9:00 AM daily...");
-    cron.schedule('0 9 * * *', async () => {
+    cron.schedule(`${process.env.CRON_EXPRESSION}`, async () => {
         console.log("🕘 Cron job triggered at 9:00 AM");
         try {
             await runProfileVisits();
