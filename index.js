@@ -21,14 +21,14 @@ async function setupDriver() {
         headless: true, // Must be headless in Docker (matching Python)
         args: [
             '--no-sandbox', // Required for Docker namespace issues
-            '--disable-setuid-sandbox', // Required for Docker
-            '--disable-dev-shm-usage', // Overcome limited resource problems in Docker
-            '--disable-gpu', // Disable GPU acceleration in Docker
-            '--disable-extensions', // Disable extensions
-            '--disable-web-security', // Disable web security for Docker
-            '--disable-features=VizDisplayCompositor', // Helps with Docker issues
-            '--window-size=1920,1080', // Set window size
-            '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            // '--disable-setuid-sandbox', // Required for Docker
+            // '--disable-dev-shm-usage', // Overcome limited resource problems in Docker
+            // '--disable-gpu', // Disable GPU acceleration in Docker
+            // '--disable-extensions', // Disable extensions
+            // '--disable-web-security', // Disable web security for Docker
+            // '--disable-features=VizDisplayCompositor', // Helps with Docker issues
+            // '--window-size=1920,1080', // Set window size
+            // '--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
     };
     
@@ -317,6 +317,10 @@ function setupAPI() {
                 {
                     url: `http://localhost:${port}`,
                     description: 'Development server',
+                },
+                {
+                    url: 'https://linkedin-profile-visitor-pup-script.nhs9sl.easypanel.host',
+                    description: 'Production server',
                 },
             ],
             tags: [
