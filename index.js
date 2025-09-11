@@ -1,7 +1,9 @@
 const puppeteer = require('puppeteer-core');
 const fs = require('fs').promises;
-const path = require('path');
-const schedule = require('node-schedule');
+const express = require('express');
+const cron = require('node-cron');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
 require('dotenv').config({ override: true });
 
 function sleep(ms) {
@@ -255,64 +257,300 @@ function loadProfileUrls() {
 }
 
 /**
- * Main function
+ * Run profile visits for all URLs
  */
-async function main() {
-    console.log("🎯 Starting main function...");
+async function runProfileVisits() {
+    console.log("🎯 Starting profile visits...");
     
     // Load profile URLs
     const profileUrls = loadProfileUrls();
     if (!profileUrls) {
         console.log("❌ No valid profile URLs found. Exiting...");
-        return;
+        return { success: false, message: "No valid profile URLs found" };
     }
     
     console.log(`📅 Current time: ${new Date().toLocaleString()}`);
+    console.log(`🔗 Visiting ${profileUrls.length} profiles...`);
     
-    // Test authentication before scheduling any jobs
-    // console.log("🔐 Testing authentication before starting profile visits...");
-    // try {
-    //     const testBrowser = await setupDriver();
-    //     const testPage = await testBrowser.newPage();
-    //     await addCookie(testPage);
-    //     await testBrowser.close();
-    //     console.log("✅ Authentication test passed - proceeding with profile visits");
-    // } catch (error) {
-    //     console.error("❌ Authentication test failed:", error.message);
-    //     console.error("💡 Please check your cookies.json file and try again");
-    //     return;
-    // }
+    const results = [];
     
-    // Schedule a job for each URL
+    // Visit each profile
     for (let index = 0; index < profileUrls.length; index++) {
         const url = profileUrls[index];
+        console.log(`⏰ Processing URL ${index + 1}: ${url}`);
         
-        // Schedule each job at a specific time
-        const scheduleTime = "13:39"; // Change this to your desired time
-        console.log(`⏰ Scheduling job for URL ${index + 1} at ${scheduleTime}: ${url}`);
-        
-        // Uncomment one of these scheduling options:
-        // schedule.scheduleJob('39 13 * * *', () => visitProfile(url)); // Schedule for specific time daily
-        // schedule.scheduleJob('* * * * *', () => visitProfile(url)); // Schedule every minute
-        
-        // Run immediately (current behavior, matching Python)
-        await visitProfile(url);
+        try {
+            await visitProfile(url);
+            results.push({ url, success: true });
+        } catch (error) {
+            console.error(`❌ Failed to visit ${url}:`, error.message);
+            results.push({ url, success: false, error: error.message });
+        }
     }
     
-    console.log("✅ Scheduler is running. Jobs are scheduled for each URL.");
-    console.log("⏳ Waiting for scheduled time...");
+    console.log("✅ Profile visits completed!");
+    return { success: true, results };
+}
+
+/**
+ * Setup Express API server with Swagger documentation
+ */
+function setupAPI() {
+    const app = express();
+    const port = process.env.PORT || 3000;
     
-    // Keep the script running to allow the scheduler to execute the jobs
-    while (true) {
-        const currentTime = new Date().toLocaleString();
-        console.log(`🕐 Current time: ${currentTime}`);
-        
-        // Check for pending scheduled jobs
-        // Note: In the Python version this runs schedule.run_pending()
-        // Here we're just keeping the process alive since we're running immediately
-        
-        await sleep(1000); // Sleep 1 second like Python
-    }
+    app.use(express.json());
+    
+    // Swagger configuration
+    const swaggerOptions = {
+        definition: {
+            openapi: '3.0.0',
+            info: {
+                title: 'LinkedIn Profile Visitor API',
+                version: '1.0.0',
+                description: 'API for managing LinkedIn profile visits with automated scheduling',
+                contact: {
+                    name: 'LinkedIn Profile Visitor',
+                },
+            },
+            servers: [
+                {
+                    url: `http://localhost:${port}`,
+                    description: 'Development server',
+                },
+            ],
+            tags: [
+                {
+                    name: 'System',
+                    description: 'System health and status endpoints',
+                },
+                {
+                    name: 'Profile Visits',
+                    description: 'LinkedIn profile visiting operations',
+                },
+            ],
+        },
+        apis: ['./index.js'], // Path to the API docs
+    };
+    
+    const specs = swaggerJsdoc(swaggerOptions);
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+        customCss: '.swagger-ui .topbar { display: none }',
+        customSiteTitle: 'LinkedIn Profile Visitor API'
+    }));
+    
+    /**
+     * @swagger
+     * components:
+     *   schemas:
+     *     HealthResponse:
+     *       type: object
+     *       properties:
+     *         status:
+     *           type: string
+     *           example: ok
+     *         timestamp:
+     *           type: string
+     *           format: date-time
+     *           example: 2024-01-01T12:00:00.000Z
+     *     
+     *     StatusResponse:
+     *       type: object
+     *       properties:
+     *         status:
+     *           type: string
+     *           example: running
+     *         nextRun:
+     *           type: string
+     *           example: 9:00 AM daily
+     *         timestamp:
+     *           type: string
+     *           format: date-time
+     *           example: 2024-01-01T12:00:00.000Z
+     *     
+     *     ProfileResult:
+     *       type: object
+     *       properties:
+     *         url:
+     *           type: string
+     *           example: https://www.linkedin.com/in/example-profile
+     *         success:
+     *           type: boolean
+     *           example: true
+     *         error:
+     *           type: string
+     *           example: Error message if failed
+     *     
+     *     RunResponse:
+     *       type: object
+     *       properties:
+     *         success:
+     *           type: boolean
+     *           example: true
+     *         message:
+     *           type: string
+     *           example: Profile visits completed
+     *         timestamp:
+     *           type: string
+     *           format: date-time
+     *           example: 2024-01-01T12:00:00.000Z
+     *         results:
+     *           type: array
+     *           items:
+     *             $ref: '#/components/schemas/ProfileResult'
+     *     
+     *     ErrorResponse:
+     *       type: object
+     *       properties:
+     *         success:
+     *           type: boolean
+     *           example: false
+     *         message:
+     *           type: string
+     *           example: Profile visits failed
+     *         error:
+     *           type: string
+     *           example: Detailed error message
+     *         timestamp:
+     *           type: string
+     *           format: date-time
+     *           example: 2024-01-01T12:00:00.000Z
+     */
+    
+    /**
+     * @swagger
+     * /health:
+     *   get:
+     *     summary: Health check endpoint
+     *     description: Returns the current health status of the application
+     *     tags: [System]
+     *     responses:
+     *       200:
+     *         description: Application is healthy
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/HealthResponse'
+     */
+    app.get('/health', (req, res) => {
+        res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    });
+    
+    /**
+     * @swagger
+     * /status:
+     *   get:
+     *     summary: Get application status
+     *     description: Returns the current application status and scheduling information
+     *     tags: [System]
+     *     responses:
+     *       200:
+     *         description: Application status information
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/StatusResponse'
+     */
+    app.get('/status', (req, res) => {
+        res.json({
+            status: 'running',
+            nextRun: '9:00 AM daily',
+            timestamp: new Date().toISOString()
+        });
+    });
+    
+    /**
+     * @swagger
+     * /run:
+     *   post:
+     *     summary: Manually trigger profile visits
+     *     description: Immediately starts visiting all configured LinkedIn profiles
+     *     tags: [Profile Visits]
+     *     responses:
+     *       200:
+     *         description: Profile visits completed successfully
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/RunResponse'
+     *       500:
+     *         description: Profile visits failed
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/ErrorResponse'
+     */
+    app.post('/run', async (req, res) => {
+        console.log("🚀 Manual run triggered via API");
+        try {
+            const result = await runProfileVisits();
+            res.json({
+                success: true,
+                message: "Profile visits completed",
+                timestamp: new Date().toISOString(),
+                ...result
+            });
+        } catch (error) {
+            console.error("❌ API run failed:", error);
+            res.status(500).json({
+                success: false,
+                message: "Profile visits failed",
+                error: error.message,
+                timestamp: new Date().toISOString()
+            });
+        }
+    });
+    
+    // Welcome page with API documentation links
+    app.get('/', (req, res) => {
+        res.json({
+            name: 'LinkedIn Profile Visitor API',
+            version: '1.0.0',
+            description: 'API for managing LinkedIn profile visits with automated scheduling',
+            documentation: `/api-docs`,
+            endpoints: {
+                health: '/health',
+                status: '/status',
+                run: '/run (POST)',
+                docs: '/api-docs'
+            }
+        });
+    });
+    
+    app.listen(port, () => {
+        console.log(`🌐 API server running on port ${port}`);
+        console.log(`📋 Endpoints:`);
+        console.log(`   GET  /         - API info`);
+        console.log(`   GET  /health   - Health check`);
+        console.log(`   POST /run      - Manual trigger`);
+        console.log(`   GET  /status   - Status info`);
+        console.log(`   GET  /api-docs - Swagger documentation`);
+        console.log(`\n🔗 Swagger UI available at: http://localhost:${port}/api-docs`);
+    });
+}
+
+async function main() {
+    console.log("🎯 Starting LinkedIn Profile Visitor...");
+    
+    // Setup API server
+    setupAPI();
+    
+    // Setup cron job for 9 AM daily
+    console.log("⏰ Setting up cron job for 9:00 AM daily...");
+    cron.schedule('0 9 * * *', async () => {
+        console.log("🕘 Cron job triggered at 9:00 AM");
+        try {
+            await runProfileVisits();
+        } catch (error) {
+            console.error("❌ Cron job failed:", error);
+        }
+    }, {
+        timezone: "UTC" // Change this to your timezone if needed
+    });
+    
+    console.log("✅ Application started successfully!");
+    console.log("📅 Profile visits will run daily at 9:00 AM");
+    console.log("🌐 Use POST /run endpoint to trigger manually");
 }
 
 // Run the main function if this file is executed directly

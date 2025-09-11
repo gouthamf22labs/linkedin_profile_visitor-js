@@ -48,7 +48,7 @@ RUN chown -R appuser:appuser /usr/src/app
 USER appuser
 
 # Expose the ports needed for the application
-EXPOSE 8080
+EXPOSE 3000
 
 # Set environment variables
 ENV DISPLAY=:99.0
